@@ -12,3 +12,6 @@ egui.workspace = true
 fontique.workspace = true
 image.workspace = true
 rfd.workspace = true
+
+[build-dependencies]
+winresource.workspace = true

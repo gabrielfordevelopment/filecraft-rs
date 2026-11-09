@@ -35,6 +35,7 @@
 | `crates/filecraft/src/theme.rs`, `icons.rs` | Light and dark palettes, fonts and base styling, Material Icons glyphs with palette tones |
 | `crates/filecraft/src/strings.rs` | All user-facing UI text |
 | `assets/` | Material Icons font and application icon, embedded at build time |
+| `crates/filecraft/build.rs` | Embeds the application icon and the version information into the Windows executable |
 
 ## Working agreements
 
