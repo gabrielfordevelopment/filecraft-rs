@@ -1,0 +1,136 @@
+name: Release
+
+# Builds a release of the current commit of main and creates a draft GitHub release for review.
+# Started by hand with Run workflow.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - name: Require main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "Releases are built only from main. Select main in Run workflow." >&2
+          exit 1
+      - uses: actions/checkout@v4
+      - name: Read the version
+        id: version
+        run: |
+          versions=$(cargo metadata --locked --no-deps --format-version 1 | jq -r '[.packages[].version] | unique | .[]')
+          if [ "$(printf '%s\n' "$versions" | wc -l)" -ne 1 ]; then
+            echo "All crates must use the workspace version." >&2
+            exit 1
+          fi
+          version=$versions
+          if ! [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Releases need a stable X.Y.Z version, not $version." >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+      - name: Read the release notes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          awk -v heading="## [$VERSION]" '
+            /^## \[/ { if (found) exit; if (index($0, heading) == 1) { found = 1; next } }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+          if ! grep -q '[^[:space:]]' release-notes.md; then
+            echo "CHANGELOG.md needs a section with notes for $VERSION." >&2
+            exit 1
+          fi
+      - name: Check that the version is new
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if gh api "repos/$GH_REPO/git/ref/tags/$TAG" > /dev/null 2>&1; then
+            echo "The tag $TAG already exists." >&2
+            exit 1
+          fi
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "The release $TAG already exists." >&2
+            exit 1
+          fi
+          latest=$(gh release list --exclude-drafts --exclude-pre-releases --limit 1 --json tagName --jq '.[0].tagName // ""')
+          if [ -n "$latest" ]; then
+            newest=$(printf '%s\n%s\n' "${latest#v}" "$VERSION" | sort -V | tail -n 1)
+            if [ "${latest#v}" = "$VERSION" ] || [ "$newest" != "$VERSION" ]; then
+              echo "$VERSION is not newer than the latest release $latest." >&2
+              exit 1
+            fi
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: release-notes.md
+          if-no-files-found: error
+
+  checks:
+    needs: prepare
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    needs: [prepare, checks]
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build
+        run: cargo build --locked --release
+      - name: Package
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          $name = "FileCraft-v$env:VERSION-windows-x64"
+          $folder = "artifacts/$name"
+          New-Item -ItemType Directory -Path $folder | Out-Null
+          Copy-Item target/release/filecraft.exe "$folder/FileCraft.exe"
+          Copy-Item LICENSE, THIRD-PARTY-NOTICES.md $folder
+          Compress-Archive -Path "$folder/*" -DestinationPath "artifacts/$name.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package
+          path: artifacts/*.zip
+          if-no-files-found: error
+
+  draft-release:
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: package
+          path: artifacts
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+      - name: Create the tag and the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          gh api "repos/$GH_REPO/git/refs" -f ref="refs/tags/$TAG" -f sha="$GITHUB_SHA" > /dev/null
+          gh release create "$TAG" artifacts/*.zip --verify-tag --draft \
+            --title "FileCraft $TAG" --notes-file release-notes.md
+          echo "Draft release $TAG created. Review it, then publish it from Releases." >> "$GITHUB_STEP_SUMMARY"
