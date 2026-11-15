@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver};
 
-use filecraft_core::image_tools::{self, FileResult, Options, RunResult};
+use filecraft_core::image_tools::{self, FileResult, Options, ProgressEvent, RunResult};
 
 use crate::background::{Repaint, Task};
 use crate::dialog::Dialog;
@@ -20,7 +20,7 @@ use crate::toast::Toast;
 
 struct Running {
     task: Task<io::Result<RunResult>>,
-    progress: Receiver<FileResult>,
+    progress: Receiver<ProgressEvent>,
     cancel: Arc<AtomicBool>,
 }
 
@@ -42,6 +42,8 @@ pub struct ImageToolsTab {
     rows: Vec<FileResult>,
     results: bool,
     output: Option<PathBuf>,
+    progress_total: Option<usize>,
+    stopped: bool,
 }
 
 impl Default for ImageToolsTab {
@@ -58,6 +60,8 @@ impl Default for ImageToolsTab {
             rows: Vec::new(),
             results: false,
             output: None,
+            progress_total: None,
+            stopped: false,
         }
     }
 }
@@ -66,11 +70,19 @@ impl ImageToolsTab {
     /// Poll from the main window, including while another tab is selected.
     pub fn poll(&mut self) -> Option<TabRequest> {
         if let Some(running) = &self.running {
-            self.rows.extend(running.progress.try_iter());
+            for event in running.progress.try_iter() {
+                match event {
+                    ProgressEvent::Listed { total } => self.progress_total = Some(total),
+                    ProgressEvent::File(row) => self.rows.push(row),
+                }
+            }
             if let Some(result) = running.task.poll() {
                 self.running = None;
+                self.stopped = true;
                 return Some(match result {
                     Ok(Ok(run)) => {
+                        self.progress_total = Some(run.total);
+                        self.stopped = run.cancelled;
                         self.rows = run.files;
                         self.output = Some(run.output);
                         let saved = self.rows.iter().filter(|row| row.outcome.is_ok()).count();
@@ -122,6 +134,8 @@ impl ImageToolsTab {
         let options = self.options.clone();
         self.rows.clear();
         self.output = None;
+        self.progress_total = None;
+        self.stopped = false;
         self.results = !preview;
         if preview {
             self.preview = Some(Task::spawn(ctx, move || {
@@ -143,8 +157,8 @@ impl ImageToolsTab {
                     &options,
                     font.as_ref(),
                     &worker_cancel,
-                    |row| {
-                        let _ = sender.send(row.clone());
+                    |event| {
+                        let _ = sender.send(event);
                         repaint.soon();
                     },
                 )

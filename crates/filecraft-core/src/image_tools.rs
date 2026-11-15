@@ -15,7 +15,7 @@ use image::{DynamicImage, GenericImageView, ImageDecoder, ImageFormat, ImageRead
 use crate::path_key::name_key;
 
 pub const OUTPUT_FOLDER: &str = "edited-images";
-pub const DEFAULT_MAX_DIMENSION: u32 = 2000;
+pub const DEFAULT_MAX_DIMENSION: u32 = 2100;
 const MAX_PIXELS: u64 = 50_000_000;
 const MAX_FILE_BYTES: u64 = 256 * 1024 * 1024;
 
@@ -37,10 +37,12 @@ pub struct Options {
     pub resize: bool,
     pub max_width: Option<u32>,
     pub max_height: Option<u32>,
-    /// Visible glyph height as a percentage of the final, displayed image height.
+    /// Visible glyph height as a percentage of the final reference dimension.
     pub text_height_percent: f32,
-    /// Both margins are measured against the final, displayed image height.
+    /// Both margins use the same final reference dimension as the glyph height.
     pub margin_percent: f32,
+    /// Use the shorter side of the displayed image instead of its height for percentages.
+    pub match_orientation: bool,
     pub corner: StampCorner,
 }
 
@@ -61,8 +63,9 @@ impl Default for Options {
             resize: false,
             max_width: Some(DEFAULT_MAX_DIMENSION),
             max_height: Some(DEFAULT_MAX_DIMENSION),
-            text_height_percent: 2.0,
-            margin_percent: 4.0,
+            text_height_percent: 3.0,
+            margin_percent: 5.0,
+            match_orientation: true,
             corner: StampCorner::BottomLeft,
         }
     }
@@ -167,7 +170,14 @@ pub struct Processed {
 pub struct RunResult {
     pub output: PathBuf,
     pub files: Vec<FileResult>,
+    pub total: usize,
     pub cancelled: bool,
+}
+
+/// Reports the initial workload once, then every completed file, including failures.
+pub enum ProgressEvent {
+    Listed { total: usize },
+    File(FileResult),
 }
 
 /// Lists only regular JPEG/PNG files directly in the chosen source folder.
@@ -253,7 +263,7 @@ pub fn process_folder(
     options: &Options,
     font: Option<&StampFont>,
     cancel: &AtomicBool,
-    mut progress: impl FnMut(&FileResult),
+    mut progress: impl FnMut(ProgressEvent),
 ) -> io::Result<RunResult> {
     options.validate()?;
     if options.add_date && font.is_none() {
@@ -265,6 +275,8 @@ pub fn process_folder(
             "No JPEG or PNG files were found directly in this folder.",
         ));
     }
+    let total = paths.len();
+    progress(ProgressEvent::Listed { total });
     let output = create_output(source)?;
     let mut files = Vec::new();
     for path in paths {
@@ -279,12 +291,13 @@ pub fn process_folder(
                 .into_owned(),
             outcome: process_file(&path, &output, options, font).map_err(|e| e.to_string()),
         };
-        progress(&result);
+        progress(ProgressEvent::File(result.clone()));
         files.push(result);
     }
     Ok(RunResult {
         output,
         files,
+        total,
         cancelled: cancel.load(Ordering::Relaxed),
     })
 }
@@ -407,7 +420,12 @@ fn stamp(
     } else {
         DynamicImage::ImageRgba8(image.to_rgba8())
     };
-    let target = (image.height() as f32 * options.text_height_percent / 100.0)
+    let reference_dimension = if options.match_orientation {
+        image.width().min(image.height())
+    } else {
+        image.height()
+    } as f32;
+    let target = (reference_dimension * options.text_height_percent / 100.0)
         .round()
         .max(1.0);
     let scaled = font.0.as_scaled(PxScale::from(100.0));
@@ -448,7 +466,7 @@ fn stamp(
     let stroke = (target * 0.08).round().max(1.0) as i32;
     let mask_w = rect.width() as u32 + 2 * stroke as u32;
     let mask_h = rect.height() as u32 + 2 * stroke as u32;
-    let margin = (image.height() as f32 * options.margin_percent / 100.0).round() as u32;
+    let margin = (reference_dimension * options.margin_percent / 100.0).round() as u32;
     if mask_w.saturating_add(margin.saturating_mul(2)) > image.width()
         || mask_h.saturating_add(margin.saturating_mul(2)) > image.height()
     {

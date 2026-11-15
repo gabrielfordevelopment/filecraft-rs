@@ -50,8 +50,9 @@ pub const IMAGE_POSITION: &str = "Position";
 pub const IMAGE_CORNERS: [&str; 4] = ["Top left", "Top right", "Bottom left", "Bottom right"];
 pub const IMAGE_TEXT_HEIGHT: &str = "Text height (%)";
 pub const IMAGE_MARGIN: &str = "Margin (%)";
-pub const IMAGE_STAMP_STYLE: &str =
-    "White text with a black outline. Percentages use the final image height.";
+pub const IMAGE_MATCH_ORIENTATION: &str = "Match portrait and landscape";
+pub const IMAGE_MATCH_ORIENTATION_HINT: &str = "Use the final image's shorter side for text height and margins, keeping them consistent across portrait and landscape images with the same dimensions.";
+pub const IMAGE_STAMP_STYLE: &str = "White text with a black outline. Percentages use the final image height, or its shorter side when matching portrait and landscape.";
 pub const IMAGE_FILES_LABEL: &str = "files";
 pub const IMAGE_READY_LABEL: &str = "ready";
 pub const IMAGE_SAVED_LABEL: &str = "saved";
@@ -73,6 +74,19 @@ pub const IMAGE_PROCESS: &str = "Process images";
 pub const IMAGE_CANCEL: &str = "Stop after current image";
 pub const IMAGE_CANCELLING: &str = "Stopping...";
 pub const IMAGE_PROCESSING: &str = "Processing images...";
+pub const IMAGE_FINDING: &str = "Finding images...";
+pub const IMAGE_PROGRESS_COMPLETE: &str = "Completed";
+pub const IMAGE_PROGRESS_STOPPED: &str = "Stopped";
+
+pub fn image_progress(status: &str, completed: usize, total: usize) -> String {
+    let completed = completed.min(total);
+    let percent = completed.saturating_mul(100) / total.max(1);
+    format!(
+        "{status} {} / {} ({percent}%)",
+        format_grouped(completed as u64),
+        format_grouped(total as u64)
+    )
+}
 pub const IMAGE_READING: &str = "Reading image headers...";
 pub const IMAGE_RESULTS: &str = "Results";
 pub const IMAGE_PREVIEW_TITLE: &str = "Preview (headers only)";

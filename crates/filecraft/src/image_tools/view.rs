@@ -8,7 +8,7 @@ use crate::export_footer::{self, FooterButton, Stat, StatTone};
 use crate::widgets::{self, ButtonKind, ComboItem};
 
 const GAP: f32 = 10.0;
-const SETTINGS_HEIGHT: f32 = 150.0;
+const SETTINGS_HEIGHT: f32 = 180.0;
 
 #[cfg(test)]
 mod tests;
@@ -49,6 +49,8 @@ impl ImageToolsTab {
             self.rows.clear();
             self.output = None;
             self.results = false;
+            self.progress_total = None;
+            self.stopped = false;
         }
 
         let (footer, mut request) = self.footer(ui, full, busy);
@@ -213,6 +215,12 @@ impl ImageToolsTab {
                             );
                             ui.end_row();
                         });
+                    widgets::labeled_check_box(
+                        ui,
+                        &mut self.options.match_orientation,
+                        strings::IMAGE_MATCH_ORIENTATION,
+                    )
+                    .on_hover_text(strings::IMAGE_MATCH_ORIENTATION_HINT);
                 });
             },
         );
@@ -315,10 +323,42 @@ impl ImageToolsTab {
             export_footer::stats_width(ui, &stats) + GAP * 2.0 + button_width + stop_width
                 > full.width() - 20.0;
         let button_height = export_footer::button_height(ui);
-        let height = button_height + 20.0 + if stacked { 30.0 } else { 0.0 };
+        let show_progress =
+            self.results && (self.running.is_some() || self.progress_total.is_some());
+        let progress_height = if show_progress { 36.0 } else { 0.0 };
+        let height = button_height + 20.0 + if stacked { 30.0 } else { 0.0 } + progress_height;
         let area = Rect::from_min_max(pos2(full.left(), full.bottom() - height), full.max);
         export_footer::separator(ui, area);
         let inner = area.shrink(10.0);
+        if show_progress {
+            let progress_rect =
+                Rect::from_min_size(inner.min, vec2(inner.width(), progress_height));
+            let mut progress_ui = ui.new_child(
+                UiBuilder::new()
+                    .max_rect(progress_rect)
+                    .layout(Layout::top_down(Align::Min)),
+            );
+            if let Some(total) = self.progress_total {
+                let completed = self.rows.len().min(total);
+                let status = if self.running.is_some() {
+                    strings::IMAGE_PROCESSING
+                } else if self.stopped {
+                    strings::IMAGE_PROGRESS_STOPPED
+                } else {
+                    strings::IMAGE_PROGRESS_COMPLETE
+                };
+                let text = strings::image_progress(status, completed, total);
+                widgets::progress_bar(
+                    &mut progress_ui,
+                    completed as f32 / total.max(1) as f32,
+                    &text,
+                );
+            } else {
+                progress_ui.horizontal(|ui| {
+                    widgets::busy_label(ui, strings::IMAGE_FINDING);
+                });
+            }
+        }
         let controls = Rect::from_min_max(
             pos2(inner.left(), inner.bottom() - button_height),
             inner.max,
@@ -368,7 +408,7 @@ impl ImageToolsTab {
             }
         }
         let center_y = if stacked {
-            inner.top() + 11.0
+            inner.top() + progress_height + 11.0
         } else {
             controls.center().y
         };

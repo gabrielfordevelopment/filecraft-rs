@@ -157,10 +157,15 @@ fn cancellation_never_publishes_an_incomplete_file() {
         &resize_options(None, Some(15)),
         None,
         &cancel,
-        |_| cancel.store(true, Ordering::Relaxed),
+        |event| {
+            if matches!(event, ProgressEvent::File(_)) {
+                cancel.store(true, Ordering::Relaxed);
+            }
+        },
     )
     .unwrap();
     assert!(result.cancelled);
+    assert_eq!(result.total, 2);
     assert_eq!(result.files.len(), 1);
     assert_eq!(fs::read_dir(result.output).unwrap().count(), 1);
     assert_eq!(fs::read_dir(source.path()).unwrap().count(), 3);
@@ -275,9 +280,14 @@ fn stamp_changes_only_its_bottom_left_region_and_keeps_originals() {
     let path = source.path().join(name);
     make_png(&path, 1000, 1000);
     let before = fs::read(&path).unwrap();
+    let options = Options {
+        text_height_percent: 2.0,
+        margin_percent: 4.0,
+        ..Options::default()
+    };
     let result = process_folder(
         source.path(),
-        &Options::default(),
+        &options,
         Some(&font()),
         &AtomicBool::new(false),
         |_| {},
@@ -302,6 +312,8 @@ fn resize_then_stamp_uses_final_dimensions() {
     let name = "2026_04_05_001.png";
     make_png(&source.path().join(name), 2000, 2000);
     let options = Options {
+        text_height_percent: 2.0,
+        margin_percent: 4.0,
         resize: true,
         max_height: Some(1000),
         ..Options::default()
@@ -465,6 +477,8 @@ fn all_stamp_corners_use_the_same_margins_and_preserve_other_pixels() {
         let mut image = DynamicImage::ImageRgba8(RgbaImage::from_pixel(1000, 1000, original));
         let options = Options {
             corner,
+            text_height_percent: 2.0,
+            margin_percent: 4.0,
             ..Options::default()
         };
         stamp(&mut image, "2026.04.05", &options, &font()).unwrap();
@@ -487,4 +501,76 @@ fn all_stamp_corners_use_the_same_margins_and_preserve_other_pixels() {
         }
         assert_eq!(buffer.get_pixel(500, 500), &original);
     }
+}
+
+#[test]
+fn matching_orientation_equalizes_glyph_height_and_margins_and_can_be_disabled() {
+    assert!(Options::default().match_orientation);
+    let bounds = |width, height, matched| {
+        let original = Rgba([41, 103, 167, 255]);
+        let mut image = DynamicImage::ImageRgba8(RgbaImage::from_pixel(width, height, original));
+        let options = Options {
+            match_orientation: matched,
+            text_height_percent: 2.0,
+            margin_percent: 4.0,
+            ..Options::default()
+        };
+        stamp(&mut image, "2026.04.05", &options, &font()).unwrap();
+        let buffer = image.to_rgba8();
+        let mut min_x = width;
+        let mut min_y = height;
+        let mut max_y = 0;
+        for (x, y, pixel) in buffer.enumerate_pixels() {
+            if *pixel != original {
+                min_x = min_x.min(x);
+                min_y = min_y.min(y);
+                max_y = max_y.max(y);
+            }
+        }
+        (min_x, height - max_y - 1, max_y - min_y + 1)
+    };
+    let portrait = bounds(1000, 1500, true);
+    let landscape = bounds(1500, 1000, true);
+    assert_eq!(portrait, landscape);
+    assert_eq!((portrait.0, portrait.1), (40, 40));
+    let original_portrait = bounds(1000, 1500, false);
+    let original_landscape = bounds(1500, 1000, false);
+    assert_eq!(original_portrait.0, 60);
+    // Rasterizing a glyph at this scale can leave one empty edge pixel in its bounds.
+    assert!(original_portrait.1.abs_diff(60) <= 1);
+    assert_eq!((original_landscape.0, original_landscape.1), (40, 40));
+    assert!(original_portrait.2 > original_landscape.2);
+}
+
+#[test]
+fn progress_reports_the_workload_before_files_and_includes_failures() {
+    let source = tempfile::tempdir().unwrap();
+    fs::write(source.path().join("a.png"), b"invalid image").unwrap();
+    make_png(&source.path().join("b.png"), 40, 30);
+    let mut reported_total = None;
+    let mut completed = 0;
+    let mut failed = 0;
+    let result = process_folder(
+        source.path(),
+        &resize_options(None, Some(15)),
+        None,
+        &AtomicBool::new(false),
+        |event| match event {
+            ProgressEvent::Listed { total } => {
+                assert!(reported_total.is_none());
+                assert_eq!(completed, 0);
+                reported_total = Some(total);
+            }
+            ProgressEvent::File(row) => {
+                assert_eq!(reported_total, Some(2));
+                completed += 1;
+                failed += usize::from(row.outcome.is_err());
+            }
+        },
+    )
+    .unwrap();
+    assert_eq!(result.total, 2);
+    assert_eq!(completed, 2);
+    assert_eq!(failed, 1);
+    assert!(!result.cancelled);
 }

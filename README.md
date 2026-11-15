@@ -28,7 +28,11 @@ cargo run --release
 
 For a Windows development session with isolated settings, run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev.ps1`. It initializes the MSVC environment, builds the current source in release mode, and runs with settings in `target/manual-test-settings`. Other actions are available through `-Action check`, `-Action clippy`, `-Action test`, `-Action build`, and `-Action fmt`. The build action also uses release mode.
 
-Image Tools is independent of File Rename. Rename first if needed, then select that folder in Image Tools. Date stamps use only the current file name and can be placed in any corner, with bottom left selected by default. Resizing happens before stamping, with default text height of 2% and margins of 4% of the final image height. Both resize limits default to 2000 pixels, with resizing itself off until enabled. Files in subfolders are excluded. Image Tools options apply to the current session.
+Image Tools is independent of File Rename. Rename first if needed, then select that folder in Image Tools. Date stamps use only the current file name and can be placed in any corner, with bottom left selected by default. Resizing happens before stamping, with default text height of 3% and margins of 5% of the final image's shorter side. Both resize limits default to 2100 pixels, with resizing itself off until enabled. Files in subfolders are excluded. Image Tools options apply to the current session.
+
+`Match portrait and landscape` is on by default and calculates both text height and margins from the shorter side of the final image. This keeps them consistent when the same image dimensions are used in opposite orientations. Turn it off to calculate percentages from the image height instead.
+
+During image processing, the footer shows a progress bar, completed and total file counts, and a percentage. Failed or skipped images count as completed work. Stopping preserves the actual progress instead of showing full completion.
 
 JPEG editing requires a lossy re-encoding, even when original quantization tables and color sampling are retained. ICC profiles and density are retained, EXIF geometry is corrected, and outdated EXIF thumbnails are disconnected. XMP, Photoshop/IPTC, and PNG text metadata are omitted when editing, with notes in the result list. Animated PNG, HDR, CMYK JPEG, and unsupported JPEG layouts are rejected when editing. Inputs above 50 megapixels or 256 MiB are reported and skipped.
 
