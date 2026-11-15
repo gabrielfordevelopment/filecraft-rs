@@ -321,6 +321,14 @@ struct SystemUiFonts {
     cache: SourceCache,
 }
 
+/// Reuses the system UI font resolver for the image stamp without bundling another font.
+pub fn image_stamp_font() -> std::io::Result<filecraft_core::image_tools::StampFont> {
+    let data = SystemUiFonts::new()
+        .find(FontWeight::NORMAL)
+        .ok_or_else(|| std::io::Error::other(crate::strings::IMAGE_FONT_UNAVAILABLE))?;
+    filecraft_core::image_tools::StampFont::new(data.font.as_ref().as_ref().to_vec(), data.index)
+}
+
 impl SystemUiFonts {
     fn new() -> Self {
         Self {

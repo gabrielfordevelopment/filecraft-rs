@@ -12,6 +12,11 @@ FileCraft uses the following third-party components. Runtime dependencies must b
 | fontique | 0.11 | Apache-2.0 OR MIT | https://github.com/linebender/parley |
 | rfd | 0.17 | MIT | https://github.com/PolyMeilex/rfd |
 | image | 0.25 | MIT OR Apache-2.0 | https://github.com/image-rs/image |
+| png | 0.18 | MIT OR Apache-2.0 | https://github.com/image-rs/image-png |
+| ab_glyph, ab_glyph_rasterizer, owned_ttf_parser | 0.2, 0.1, 0.25 | Apache-2.0 | https://github.com/alexheretic/ab-glyph |
+| ttf-parser | 0.25 | MIT OR Apache-2.0 | https://github.com/harfbuzz/ttf-parser |
+| jpeg-encoder | 0.7 | (MIT OR Apache-2.0) AND IJG | https://github.com/vstroebel/jpeg-encoder |
+| tempfile | 3 | MIT OR Apache-2.0 | https://github.com/Stebalien/tempfile |
 | chrono | 0.4 | MIT OR Apache-2.0 | https://github.com/chronotope/chrono |
 | lofty | 0.25 | MIT OR Apache-2.0 | https://github.com/Serial-ATA/lofty-rs |
 
@@ -26,6 +31,8 @@ Transitive crates with other permissive licenses:
 `self_cell` is dual licensed and used under Apache-2.0. `byteorder` and `memchr` are dual licensed and used under MIT.
 
 The application does not bundle the egui default fonts. It uses the operating system UI font at runtime.
+
+The IJG license used by `jpeg-encoder` is an accepted permissive exception. This software is based in part on the work of the Independent JPEG Group. The full IJG notice is in [licenses/jpeg-encoder-IJG.txt](licenses/jpeg-encoder-IJG.txt).
 
 ## Bundled Assets
 

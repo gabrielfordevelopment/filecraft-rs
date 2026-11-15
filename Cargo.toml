@@ -15,6 +15,9 @@ egui = { version = "0.37", default-features = false }
 etcetera = "0.11"
 fontique = { version = "0.11", features = ["fontconfig-dlopen"] }
 image = { version = "0.25", default-features = false, features = ["ico", "png"] }
+ab_glyph = "0.2"
+png = "0.18"
+jpeg-encoder = { version = "0.7", default-features = false, features = ["std"] }
 lofty = "0.25"
 rfd = "0.17"
 serde = { version = "1", features = ["derive"] }
