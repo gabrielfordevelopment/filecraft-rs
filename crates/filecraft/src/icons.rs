@@ -47,6 +47,7 @@ pub const FILE_CONTENT_EXPORT: Icon = icon('\u{f1c8}', Tone::Folder);
 pub const TREE_GENERATOR: Icon = icon('\u{ea63}', Tone::Tree);
 pub const FOLDER_CONTENT_EXPORT: Icon = icon('\u{e875}', Tone::Accent);
 pub const FILE_RENAME: Icon = icon('\u{e9a2}', Tone::Rename);
+pub const IMAGE_TOOLS: Icon = icon('\u{e3f4}', Tone::Accent);
 pub const OPTIONS: Icon = icon('\u{e8b8}', Tone::Muted);
 
 pub const UNDO: Icon = icon('\u{e166}', Tone::Text);

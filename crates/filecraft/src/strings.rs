@@ -42,6 +42,81 @@ pub const TAB_FILE_CONTENT_EXPORT: &str = "File Content Export";
 pub const TAB_TREE_GENERATOR: &str = "Tree Generator";
 pub const TAB_FOLDER_CONTENT_EXPORT: &str = "Folder Content Export";
 pub const TAB_FILE_RENAME: &str = "File Rename";
+pub const TAB_IMAGE_TOOLS: &str = "Image Tools";
+pub const IMAGE_SOURCE: &str = "Image source folder";
+pub const IMAGE_SELECT_SOURCE: &str = "Select the folder containing the images";
+pub const IMAGE_STAMP: &str = "Add date stamp from file name";
+pub const IMAGE_POSITION: &str = "Position";
+pub const IMAGE_CORNERS: [&str; 4] = ["Top left", "Top right", "Bottom left", "Bottom right"];
+pub const IMAGE_TEXT_HEIGHT: &str = "Text height (%)";
+pub const IMAGE_MARGIN: &str = "Margin (%)";
+pub const IMAGE_MATCH_ORIENTATION: &str = "Match portrait and landscape";
+pub const IMAGE_MATCH_ORIENTATION_HINT: &str = "Use the final image's shorter side for text height and margins, keeping them consistent across portrait and landscape images with the same dimensions.";
+pub const IMAGE_STAMP_STYLE: &str = "White text with a black outline. Percentages use the final image height, or its shorter side when matching portrait and landscape.";
+pub const IMAGE_FILES_LABEL: &str = "files";
+pub const IMAGE_READY_LABEL: &str = "ready";
+pub const IMAGE_SAVED_LABEL: &str = "saved";
+pub const IMAGE_ERRORS_LABEL: &str = "errors";
+pub const IMAGE_BUSY_REASON: &str = "Wait for the current operation to finish.";
+pub const IMAGE_NO_ACTION: &str = "Select date stamping, resizing, or both.";
+pub const IMAGE_NO_SIZE_LIMIT: &str = "Enable at least one size limit.";
+pub const IMAGE_RESIZE: &str = "Resize images";
+pub const IMAGE_MAX_WIDTH: &str = "Limit width (px)";
+pub const IMAGE_MAX_HEIGHT: &str = "Limit height (px)";
+pub const IMAGE_RESIZE_HINT: &str =
+    "Keep proportions, fit within the enabled limits, never enlarge.";
+pub const IMAGE_FORMATS: &str =
+    "JPEG and PNG files directly in this folder. Subfolders and links are excluded.";
+pub const IMAGE_NO_VALUE: &str = "-";
+pub const IMAGE_FONT_UNAVAILABLE: &str = "No system UI font was found for the date stamp.";
+pub const IMAGE_PREVIEW: &str = "Preview";
+pub const IMAGE_PROCESS: &str = "Process images";
+pub const IMAGE_CANCEL: &str = "Stop after current image";
+pub const IMAGE_CANCELLING: &str = "Stopping...";
+pub const IMAGE_PROCESSING: &str = "Processing images...";
+pub const IMAGE_FINDING: &str = "Finding images...";
+pub const IMAGE_PROGRESS_COMPLETE: &str = "Completed";
+pub const IMAGE_PROGRESS_STOPPED: &str = "Stopped";
+
+pub fn image_progress(status: &str, completed: usize, total: usize) -> String {
+    let completed = completed.min(total);
+    let percent = completed.saturating_mul(100) / total.max(1);
+    format!(
+        "{status} {} / {} ({percent}%)",
+        format_grouped(completed as u64),
+        format_grouped(total as u64)
+    )
+}
+pub const IMAGE_READING: &str = "Reading image headers...";
+pub const IMAGE_RESULTS: &str = "Results";
+pub const IMAGE_PREVIEW_TITLE: &str = "Preview (headers only)";
+pub const IMAGE_EMPTY: &str = "Choose a folder and preview or process its images.";
+pub const IMAGE_NO_FILES: &str = "No JPEG or PNG files were found directly in this folder.";
+pub const IMAGE_FILE_COLUMN: &str = "File";
+pub const IMAGE_SIZE_COLUMN: &str = "Original -> Output";
+pub const IMAGE_DATE_COLUMN: &str = "Date stamp";
+pub const IMAGE_STATUS_COLUMN: &str = "Status";
+pub const IMAGE_COPY: &str = "Copy without re-encoding";
+pub const IMAGE_EDIT: &str = "Edit copy";
+pub const IMAGE_WRITTEN: &str = "Saved";
+pub const IMAGE_UNCHANGED: &str = "Copied unchanged";
+pub const IMAGE_OPEN_OUTPUT: &str = "Open output folder";
+pub const IMAGE_COMPLETE: &str = "Image processing finished";
+pub const IMAGE_STOPPED: &str = "Image processing stopped";
+pub const IMAGE_FAILED: &str =
+    "Some images could not be processed. See the result list for details.";
+pub const IMAGE_NO_SOURCE: &str = "Choose an image source folder first.";
+
+pub fn image_summary(saved: usize, failed: usize) -> String {
+    format!("{saved} saved, {failed} failed or skipped.")
+}
+
+pub fn image_size_pair(original: (u32, u32), output: (u32, u32)) -> String {
+    format!(
+        "{} x {} -> {} x {}",
+        original.0, original.1, output.0, output.1
+    )
+}
 pub const TAB_OPTIONS: &str = "Options";
 
 pub const FILE_RENAME_FOLDER_LABEL: &str = "Folder to rename";

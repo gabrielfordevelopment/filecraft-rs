@@ -104,6 +104,7 @@ jobs:
           New-Item -ItemType Directory -Path $folder | Out-Null
           Copy-Item target/release/filecraft.exe "$folder/FileCraft.exe"
           Copy-Item LICENSE, THIRD-PARTY-NOTICES.md $folder
+          Copy-Item -Recurse licenses "$folder/licenses"
           Compress-Archive -Path "$folder/*" -DestinationPath "artifacts/$name.zip"
       - uses: actions/upload-artifact@v4
         with:

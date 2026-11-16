@@ -11,6 +11,8 @@ use crate::theme;
 
 /// Duration of the hover color animations.
 const HOVER_ANIMATION_SECONDS: f32 = 0.1;
+const BUTTON_SPINNER_SIZE: f32 = 12.0;
+const BUTTON_SPINNER_GAP: f32 = 6.0;
 
 /// Blends two colors. `Color32` stores premultiplied channels, so blending them directly keeps a
 /// fade from a transparent color free of dark in-between frames.
@@ -116,6 +118,8 @@ pub struct ButtonStyle {
     pub horizontal_padding: f32,
     /// A Material Icons glyph before the text, 5 px apart.
     pub glyph: Option<char>,
+    /// A spinner instead of a glyph. The spinner and text are centered as one group.
+    pub spinner: bool,
     /// A fixed height instead of the text box height.
     pub height: Option<f32>,
 }
@@ -129,6 +133,7 @@ impl ButtonStyle {
             bold: false,
             horizontal_padding: 10.0,
             glyph: None,
+            spinner: false,
             height: None,
         }
     }
@@ -144,7 +149,11 @@ pub fn styled_button(ui: &mut Ui, text: &str, style: ButtonStyle, enabled: bool)
     let galley = ui
         .painter()
         .layout_no_wrap(text.to_owned(), font, Color32::PLACEHOLDER);
-    let glyph_width = style.glyph.map_or(0.0, |_| style.font + 5.0);
+    let glyph_width = if style.spinner {
+        BUTTON_SPINNER_SIZE + BUTTON_SPINNER_GAP
+    } else {
+        style.glyph.map_or(0.0, |_| style.font + 5.0)
+    };
     let padding = vec2(style.horizontal_padding, 5.0);
     let content_width = glyph_width + galley.size().x;
     let height = style.height.unwrap_or_else(|| control_height(ui));
@@ -168,7 +177,16 @@ pub fn styled_button(ui: &mut Ui, text: &str, style: ButtonStyle, enabled: bool)
         ui.painter()
             .rect(rect, 4, fill, Stroke::new(1.0, border), StrokeKind::Inside);
         let left = rect.center().x - content_width / 2.0;
-        if let Some(glyph) = style.glyph {
+        if style.spinner {
+            let spinner = Rect::from_center_size(
+                pos2(left + BUTTON_SPINNER_SIZE / 2.0, rect.center().y),
+                Vec2::splat(BUTTON_SPINNER_SIZE),
+            );
+            egui::Spinner::new()
+                .size(BUTTON_SPINNER_SIZE)
+                .color(text_color)
+                .paint_at(ui, spinner);
+        } else if let Some(glyph) = style.glyph {
             paint_glyph(
                 ui,
                 pos2(left + style.font / 2.0, rect.center().y),
@@ -294,6 +312,32 @@ pub fn busy_label(ui: &mut Ui, text: &str) -> Response {
         .paint_at(ui, rect);
     ui.add_space(6.0);
     label(ui, text, theme::body(theme::BODY_SIZE), colors.text_muted)
+}
+
+/// A slim, determinate progress bar with its status above it.
+pub fn progress_bar(ui: &mut Ui, fraction: f32, text: &str) -> Response {
+    let colors = theme::palette();
+    let caption = label(ui, text, theme::body(theme::BODY_SIZE), colors.text_muted);
+    ui.add_space(4.0);
+    let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), 6.0), Sense::hover());
+    ui.painter().rect(
+        rect,
+        3,
+        colors.surface_alt,
+        Stroke::new(1.0, colors.border_subtle),
+        StrokeKind::Inside,
+    );
+    let fraction = if fraction.is_finite() {
+        fraction.clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let inner = rect.shrink(1.0);
+    if fraction > 0.0 {
+        let filled = Rect::from_min_size(inner.min, vec2(inner.width() * fraction, inner.height()));
+        ui.painter().rect_filled(filled, 2, colors.accent);
+    }
+    caption.union(response)
 }
 
 /// Plain text placed in the layout without wrapping.
