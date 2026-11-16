@@ -10,6 +10,7 @@ pub mod file_rename;
 pub mod folder_content;
 pub mod folder_tree;
 pub mod history;
+pub mod image_tools;
 pub mod path_convert;
 pub mod path_key;
 pub mod preferences;

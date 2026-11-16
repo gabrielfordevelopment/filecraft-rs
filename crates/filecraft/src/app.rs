@@ -20,6 +20,7 @@ use crate::file_content_export::FileContentExportTab;
 use crate::file_rename::FileRenameTab;
 use crate::folder_content_export::FolderContentExportTab;
 use crate::icons::{self, Icon};
+use crate::image_tools::ImageToolsTab;
 use crate::options::{OptionsRequest, OptionsTab};
 use crate::platform;
 use crate::preset_windows::{LoadSummaryWindow, PathPresetsWindow, PresetDetailsWindow};
@@ -39,15 +40,17 @@ enum Tab {
     TreeGenerator,
     FolderContentExport,
     FileRename,
+    ImageTools,
     Options,
 }
 
 impl Tab {
-    const ALL: [Self; 5] = [
+    const ALL: [Self; 6] = [
         Self::FileContentExport,
         Self::TreeGenerator,
         Self::FolderContentExport,
         Self::FileRename,
+        Self::ImageTools,
         Self::Options,
     ];
 
@@ -57,6 +60,7 @@ impl Tab {
             Self::TreeGenerator => strings::TAB_TREE_GENERATOR,
             Self::FolderContentExport => strings::TAB_FOLDER_CONTENT_EXPORT,
             Self::FileRename => strings::TAB_FILE_RENAME,
+            Self::ImageTools => strings::TAB_IMAGE_TOOLS,
             Self::Options => strings::TAB_OPTIONS,
         }
     }
@@ -70,6 +74,7 @@ impl Tab {
             Self::FolderContentExport => 2,
             Self::Options => 4,
             Self::FileRename => 5,
+            Self::ImageTools => 6,
         }
     }
 
@@ -87,6 +92,7 @@ impl Tab {
             Self::TreeGenerator => icons::TREE_GENERATOR,
             Self::FolderContentExport => icons::FOLDER_CONTENT_EXPORT,
             Self::FileRename => icons::FILE_RENAME,
+            Self::ImageTools => icons::IMAGE_TOOLS,
             Self::Options => icons::OPTIONS,
         }
     }
@@ -99,6 +105,7 @@ impl Tab {
             Self::TreeGenerator => vec2(640.0, 380.0),
             Self::FolderContentExport => vec2(640.0, 300.0),
             Self::FileRename => vec2(640.0, 300.0),
+            Self::ImageTools => vec2(680.0, 500.0),
             Self::Options => vec2(640.0, 420.0),
         }
     }
@@ -138,6 +145,7 @@ pub struct FileCraftApp {
     tree_generator: TreeGeneratorTab,
     folder_content: FolderContentExportTab,
     file_rename: FileRenameTab,
+    image_tools: ImageToolsTab,
     options: OptionsTab,
     history: History<SaveData>,
     preset_store: Option<PresetStore>,
@@ -168,6 +176,7 @@ impl FileCraftApp {
             tree_generator: TreeGeneratorTab::default(),
             folder_content: FolderContentExportTab::default(),
             file_rename: FileRenameTab::default(),
+            image_tools: ImageToolsTab::default(),
             options: OptionsTab::default(),
             history: History::new(SaveData::default()),
             preset_store: None,
@@ -549,7 +558,7 @@ impl FileCraftApp {
     fn tab_control(&mut self, ui: &mut Ui) {
         let area = ui.available_rect_before_wrap();
         let colors = theme::palette();
-        let strip = Rect::from_min_size(area.min, vec2(area.width(), TAB_HEIGHT));
+        let strip = Rect::from_min_size(area.min, vec2(area.width(), TAB_HEIGHT + 12.0));
         let content = Rect::from_min_max(pos2(area.left(), strip.bottom()), area.max);
         // Painted once the selected tab of this frame is known.
         let background = ui.painter().add(Shape::Noop);
@@ -560,29 +569,40 @@ impl FileCraftApp {
             ],
             Stroke::new(1.0, colors.border_subtle),
         );
-        let mut x = strip.left() + 5.0;
-        for tab in Tab::ALL {
-            // Measured in the bold font, so a tab keeps its width when it is selected.
-            let width = TAB_PADDING * 2.0
-                + TAB_ICON_SIZE
-                + TAB_ICON_GAP
-                + widgets::text_width(ui, tab.title(), theme::semibold(theme::BODY_SIZE));
-            let rect = Rect::from_min_size(pos2(x, strip.top()), vec2(width, TAB_HEIGHT));
-            x += width;
-            let response = ui
-                .interact(
-                    rect,
-                    ui.scope_id().with(("tab", tab.title())),
-                    Sense::click(),
-                )
-                .on_hover_cursor(egui::CursorIcon::PointingHand);
-            if response.clicked() {
-                self.selected_tab = tab;
-            }
-            let selected = tab == self.selected_tab;
-            let hover = widgets::hover_amount(ui, &response, !selected);
-            paint_tab(ui, tab, rect, selected, hover);
-        }
+        let mut strip_ui = ui.new_child(UiBuilder::new().max_rect(strip));
+        egui::ScrollArea::horizontal()
+            .id_salt("tab_strip")
+            .auto_shrink([false, false])
+            .show(&mut strip_ui, |ui| {
+                let start = ui.cursor().min.x;
+                let mut x = start + 5.0;
+                for tab in Tab::ALL {
+                    // Measured in the bold font, so a tab keeps its width when it is selected.
+                    let width = TAB_PADDING * 2.0
+                        + TAB_ICON_SIZE
+                        + TAB_ICON_GAP
+                        + widgets::text_width(ui, tab.title(), theme::semibold(theme::BODY_SIZE));
+                    let rect = Rect::from_min_size(pos2(x, strip.top()), vec2(width, TAB_HEIGHT));
+                    x += width;
+                    let response = ui
+                        .interact(
+                            rect,
+                            ui.scope_id().with(("tab", tab.title())),
+                            Sense::click(),
+                        )
+                        .on_hover_cursor(egui::CursorIcon::PointingHand);
+                    if response.clicked() {
+                        self.selected_tab = tab;
+                    }
+                    let selected = tab == self.selected_tab;
+                    if selected && ui.ctx().cumulative_frame_nr() == 0 {
+                        ui.scroll_to_rect(rect, Some(Align::Center));
+                    }
+                    let hover = widgets::hover_amount(ui, &response, !selected);
+                    paint_tab(ui, tab, rect, selected, hover);
+                }
+                ui.allocate_space(vec2(x - start, TAB_HEIGHT));
+            });
         // Options keeps its group boxes on the window background, the other tabs show cards.
         if self.selected_tab != Tab::Options {
             ui.painter().set(
@@ -640,6 +660,11 @@ impl FileCraftApp {
             }
             Tab::FileRename => {
                 if let Some(request) = self.file_rename.ui(ui) {
+                    self.handle_tab_request(request);
+                }
+            }
+            Tab::ImageTools => {
+                if let Some(request) = self.image_tools.ui(ui) {
                     self.handle_tab_request(request);
                 }
             }
@@ -861,6 +886,11 @@ impl eframe::App for FileCraftApp {
     fn ui(&mut self, ui: &mut Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         theme::sync(&ctx);
+        if self.dialog.is_none()
+            && let Some(request) = self.image_tools.poll()
+        {
+            self.handle_tab_request(request);
+        }
         self.handle_close_request(&ctx);
         self.handle_shortcuts(&ctx);
         egui::CentralPanel::default()

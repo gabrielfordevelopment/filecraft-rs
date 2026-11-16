@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/filecraft-core", "crates/filecraft"]
 
 [workspace.package]
-version = "1.0.0"
+version = "1.1.0"
 edition = "2024"
 license = "MIT"
 
@@ -15,6 +15,9 @@ egui = { version = "0.37", default-features = false }
 etcetera = "0.11"
 fontique = { version = "0.11", features = ["fontconfig-dlopen"] }
 image = { version = "0.25", default-features = false, features = ["ico", "png"] }
+ab_glyph = "0.2"
+png = "0.18"
+jpeg-encoder = { version = "0.7", default-features = false, features = ["std"] }
 lofty = "0.25"
 rfd = "0.17"
 serde = { version = "1", features = ["derive"] }

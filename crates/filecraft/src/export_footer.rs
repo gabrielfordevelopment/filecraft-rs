@@ -348,21 +348,11 @@ pub fn paint_stats(ui: &Ui, left: f32, center_y: f32, stats: &[Stat]) {
 pub fn export_button(ui: &mut Ui, button: &FooterButton, width: f32, height: f32) -> bool {
     let enabled = button.disabled_reason.is_none() && button.busy_text.is_none();
     let text = button.busy_text.unwrap_or(button.text);
-    let response = widgets::button(ui, text, ButtonKind::Primary, enabled, vec2(width, height));
-    if button.busy_text.is_some() {
-        let text_width = widgets::text_width(ui, text, theme::semibold(theme::BODY_SIZE));
-        let spinner = Rect::from_center_size(
-            pos2(
-                response.rect.center().x - text_width / 2.0 - 12.0,
-                response.rect.center().y,
-            ),
-            egui::Vec2::splat(12.0),
-        );
-        egui::Spinner::new()
-            .size(12.0)
-            .color(theme::palette().text_hint)
-            .paint_at(ui, spinner);
-    }
+    let style = widgets::ButtonStyle {
+        spinner: button.busy_text.is_some(),
+        ..widgets::ButtonStyle::new(ButtonKind::Primary, vec2(width, height))
+    };
+    let response = widgets::styled_button(ui, text, style, enabled);
     let clicked = response.clicked() && enabled;
     if let Some(reason) = button.disabled_reason
         && button.busy_text.is_none()

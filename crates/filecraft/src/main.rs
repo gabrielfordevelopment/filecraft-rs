@@ -11,6 +11,7 @@ mod folder_content_export;
 mod folder_tree_view;
 mod icons;
 mod ignored_comments;
+mod image_tools;
 mod numbers;
 mod options;
 mod platform;
