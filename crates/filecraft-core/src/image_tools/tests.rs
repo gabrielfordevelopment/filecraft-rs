@@ -574,3 +574,81 @@ fn progress_reports_the_workload_before_files_and_includes_failures() {
     assert_eq!(failed, 1);
     assert!(!result.cancelled);
 }
+
+#[test]
+fn transparent_png_resize_keeps_visible_colors_and_sample_depth() {
+    for (sixteen, alpha) in [(false, 65535), (true, 40000), (true, 65535)] {
+        let folder = tempfile::tempdir().unwrap();
+        let source = folder.path().join("photo.png");
+        let image = if sixteen {
+            DynamicImage::ImageRgba16(ImageBuffer::from_fn(64, 32, |x, _| {
+                if x < 32 {
+                    Rgba([12345u16, 23456, 34567, alpha])
+                } else {
+                    Rgba([0, 0, 65535, 0])
+                }
+            }))
+        } else {
+            DynamicImage::ImageRgba8(ImageBuffer::from_fn(64, 32, |x, _| {
+                if x < 32 {
+                    Rgba([255u8, 0, 0, 255])
+                } else {
+                    Rgba([0, 0, 255, 0])
+                }
+            }))
+        };
+        image.save(&source).unwrap();
+        let expected_color = image.to_rgba16().get_pixel(0, 0).0;
+        let original = fs::read(&source).unwrap();
+        let result = run(folder.path(), &resize_options(Some(16), None));
+        let output = image::open(result.output.join("photo.png")).unwrap();
+        assert_eq!(output.dimensions(), (16, 8));
+        assert_eq!(output.color(), image.color());
+        let buffer = output.to_rgba16();
+        assert!(
+            buffer
+                .pixels()
+                .any(|pixel| pixel.0[3] > 0 && pixel.0[3] < 65535)
+        );
+        for pixel in buffer.pixels().filter(|pixel| pixel.0[3] > 0) {
+            for (actual, expected) in pixel.0[..3].iter().zip(&expected_color[..3]) {
+                assert!(
+                    actual.abs_diff(*expected) <= 1,
+                    "Transparent pixels must not change visible colors: {pixel:?}"
+                );
+            }
+        }
+        assert_eq!(fs::read(source).unwrap(), original);
+    }
+}
+
+#[test]
+fn transparent_grayscale_resize_keeps_grayscale_alpha_and_depth() {
+    let images = [
+        DynamicImage::ImageLumaA8(ImageBuffer::from_fn(64, 32, |x, _| {
+            if x < 32 {
+                image::LumaA([0u8, 255])
+            } else {
+                image::LumaA([255, 0])
+            }
+        })),
+        DynamicImage::ImageLumaA16(ImageBuffer::from_fn(64, 32, |x, _| {
+            if x < 32 {
+                image::LumaA([0u16, 40000])
+            } else {
+                image::LumaA([65535, 0])
+            }
+        })),
+    ];
+    for image in images {
+        let color = image.color();
+        let output = resize_image(image, (16, 8));
+        assert_eq!(output.color(), color);
+        for pixel in output.to_luma_alpha16().pixels().filter(|p| p.0[1] > 0) {
+            assert_eq!(
+                pixel.0[0], 0,
+                "Hidden white must not produce a light fringe"
+            );
+        }
+    }
+}

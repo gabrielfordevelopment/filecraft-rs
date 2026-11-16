@@ -23,10 +23,15 @@ pub(super) fn save(
     image: &DynamicImage,
     format: ImageFormat,
     output: &mut File,
+    png_info: Option<png::Info<'static>>,
 ) -> io::Result<Vec<String>> {
     match format {
         ImageFormat::Jpeg => save_jpeg(path, image, output),
-        ImageFormat::Png => save_png(path, image, output),
+        ImageFormat::Png => save_png(
+            image,
+            output,
+            png_info.ok_or_else(|| invalid("PNG metadata was not loaded."))?,
+        ),
         _ => Err(invalid("Only JPEG and PNG images can be processed.")),
     }
 }
@@ -246,24 +251,27 @@ fn write_segment(output: &mut impl Write, marker: u8, data: &[u8]) -> io::Result
     output.write_all(data)
 }
 
-fn save_png(path: &Path, image: &DynamicImage, output: &mut File) -> io::Result<Vec<String>> {
-    let mut reader = png::Decoder::new(BufReader::new(File::open(path)?))
-        .read_info()
-        .map_err(|e| invalid(&e.to_string()))?;
-    // Read all chunks, including metadata that follows IDAT, with bounded decoding.
-    let size = reader
-        .output_buffer_size()
-        .ok_or_else(|| invalid("PNG dimensions exceed the allocation limit."))?;
-    if size > 400 * 1024 * 1024 {
-        return Err(invalid("PNG exceeds the processing allocation limit."));
+/// Read through IEND so trailing EXIF is available without decoding another pixel buffer.
+pub(super) fn read_png_info(path: &Path) -> io::Result<png::Info<'static>> {
+    let file = File::open(path)?;
+    if file.metadata()?.len() > super::MAX_FILE_BYTES {
+        return Err(invalid("The image exceeds the 256 MiB input limit."));
     }
-    reader
-        .next_frame(&mut vec![0; size])
+    let mut reader = png::Decoder::new(BufReader::new(file))
+        .read_info()
         .map_err(|e| invalid(&e.to_string()))?;
     reader.finish().map_err(|e| invalid(&e.to_string()))?;
     let mut info = reader.info().clone();
     info.source_gamma = info.gama_chunk.or(info.source_gamma);
     info.source_chromaticities = info.chrm_chunk.or(info.source_chromaticities);
+    Ok(info)
+}
+
+fn save_png(
+    image: &DynamicImage,
+    output: &mut File,
+    mut info: png::Info<'static>,
+) -> io::Result<Vec<String>> {
     if info.animation_control.is_some() {
         return Err(invalid("Animated PNG images are not supported."));
     }
@@ -637,5 +645,82 @@ mod tests {
             Some(png::ScaledFloat::new(0.45455))
         );
         assert_eq!(reader.info().size(), (60, 40));
+    }
+
+    #[test]
+    fn png_orientation_before_or_after_pixels_matches_preview_and_saved_geometry() {
+        for trailing in [false, true] {
+            let folder = tempfile::tempdir().unwrap();
+            let source = folder.path().join("photo.png");
+            let mut info = png::Info::with_size(120, 80);
+            info.color_type = png::ColorType::Rgb;
+            if !trailing {
+                info.exif_metadata = Some(Cow::Owned(exif(6)));
+            }
+            let mut writer = png::Encoder::with_info(File::create(&source).unwrap(), info)
+                .unwrap()
+                .write_header()
+                .unwrap();
+            let pixels: Vec<u8> = (0..80)
+                .flat_map(|_| (0..120).flat_map(|x| if x < 60 { [255, 0, 0] } else { [0, 0, 255] }))
+                .collect();
+            writer.write_image_data(&pixels).unwrap();
+            if trailing {
+                writer.write_chunk(png::chunk::eXIf, &exif(6)).unwrap();
+            }
+            writer.finish().unwrap();
+            let original = std::fs::read(&source).unwrap();
+            for max_height in [60, 200] {
+                let options = Options {
+                    add_date: false,
+                    resize: true,
+                    max_width: None,
+                    max_height: Some(max_height),
+                    ..Options::default()
+                };
+                let preview = crate::image_tools::preview_folder(folder.path(), &options).unwrap();
+                let expected = if max_height == 60 {
+                    (40, 60)
+                } else {
+                    (80, 120)
+                };
+                let item = preview[0].outcome.as_ref().unwrap();
+                assert_eq!(item.original_size, (80, 120), "trailing EXIF: {trailing}");
+                assert_eq!(item.output_size, expected);
+                let run = process_folder(
+                    folder.path(),
+                    &options,
+                    None,
+                    &AtomicBool::new(false),
+                    |_| {},
+                )
+                .unwrap();
+                let result = run.files[0].outcome.as_ref().unwrap();
+                assert_eq!(result.original_size, (80, 120));
+                assert_eq!(result.output_size, expected);
+                let output = run.output.join("photo.png");
+                if max_height == 60 {
+                    let image = image::open(&output).unwrap().to_rgb8();
+                    assert_eq!(image.dimensions(), (40, 60));
+                    assert_eq!(image.get_pixel(10, 10).0, [255, 0, 0]);
+                    assert_eq!(image.get_pixel(10, 50).0, [0, 0, 255]);
+                    let mut decoder = image::ImageReader::open(&output)
+                        .unwrap()
+                        .with_guessed_format()
+                        .unwrap()
+                        .into_decoder()
+                        .unwrap();
+                    use image::ImageDecoder;
+                    assert_eq!(
+                        decoder.orientation().unwrap(),
+                        image::metadata::Orientation::NoTransforms
+                    );
+                } else {
+                    assert!(result.copied);
+                    assert_eq!(std::fs::read(output).unwrap(), original);
+                }
+                assert_eq!(std::fs::read(&source).unwrap(), original);
+            }
+        }
     }
 }

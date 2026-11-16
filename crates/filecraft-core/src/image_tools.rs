@@ -10,6 +10,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use ab_glyph::{Font, FontArc, Glyph, PxScale, ScaleFont, point};
 use chrono::NaiveDate;
+use image::metadata::Orientation;
 use image::{DynamicImage, GenericImageView, ImageDecoder, ImageFormat, ImageReader, Rgba};
 
 use crate::path_key::name_key;
@@ -204,7 +205,7 @@ pub fn source_files(source: &Path) -> io::Result<Vec<PathBuf>> {
     Ok(files)
 }
 
-/// Header-only preview. It neither decodes pixels nor creates output files.
+/// Metadata-only preview. PNG chunks are scanned through IEND without decoding pixels.
 pub fn preview_folder(source: &Path, options: &Options) -> io::Result<Vec<FileResult>> {
     options.validate()?;
     source_files(source)?
@@ -215,10 +216,14 @@ pub fn preview_folder(source: &Path, options: &Options) -> io::Result<Vec<FileRe
                 if !matches!(reader.format(), Some(ImageFormat::Jpeg | ImageFormat::Png)) {
                     return Err(invalid("The file is not a JPEG or PNG image."));
                 }
+                let png_info = if reader.format() == Some(ImageFormat::Png) {
+                    Some(metadata::read_png_info(&path)?)
+                } else {
+                    None
+                };
                 let mut decoder = reader.into_decoder().map_err(image_error)?;
                 let (mut width, mut height) = decoder.dimensions();
-                let orientation = decoder.orientation().map_err(image_error)?;
-                use image::metadata::Orientation;
+                let orientation = image_orientation(&mut decoder, png_info.as_ref())?;
                 if matches!(
                     orientation,
                     Orientation::Rotate90
@@ -360,7 +365,12 @@ fn process_file(
             "The image exceeds the 50 megapixel processing limit.",
         ));
     }
-    let orientation = decoder.orientation().map_err(image_error)?;
+    let png_info = if format == ImageFormat::Png {
+        Some(metadata::read_png_info(path)?)
+    } else {
+        None
+    };
+    let orientation = image_orientation(&mut decoder, png_info.as_ref())?;
     let mut image = DynamicImage::from_decoder(decoder).map_err(image_error)?;
     image.apply_orientation(orientation);
     let original_size = image.dimensions();
@@ -372,11 +382,7 @@ fn process_file(
         io::copy(&mut File::open(path)?, temporary.as_file_mut())?;
     } else {
         if output_size != original_size {
-            image = image.resize_exact(
-                output_size.0,
-                output_size.1,
-                image::imageops::FilterType::Lanczos3,
-            );
+            image = resize_image(image, output_size);
         }
         if let Some(date) = date {
             stamp(
@@ -386,7 +392,7 @@ fn process_file(
                 font.ok_or_else(|| invalid("No date stamp font is available."))?,
             )?;
         }
-        notes = metadata::save(path, &image, format, temporary.as_file_mut())?;
+        notes = metadata::save(path, &image, format, temporary.as_file_mut(), png_info)?;
     }
     temporary.as_file_mut().flush()?;
     temporary.as_file().sync_all()?;
@@ -405,6 +411,69 @@ fn process_file(
         copied,
         notes,
     })
+}
+
+fn image_orientation(
+    decoder: &mut impl ImageDecoder,
+    png_info: Option<&png::Info<'_>>,
+) -> io::Result<Orientation> {
+    if let Some(info) = png_info {
+        Ok(info
+            .exif_metadata
+            .as_deref()
+            .and_then(Orientation::from_exif_chunk)
+            .unwrap_or(Orientation::NoTransforms))
+    } else {
+        decoder.orientation().map_err(image_error)
+    }
+}
+
+/// Filter color channels weighted by alpha, then restore straight alpha at the original depth.
+/// Opaque images retain the ordinary resizing path and avoid the extra float buffer.
+fn resize_image(image: DynamicImage, size: (u32, u32)) -> DynamicImage {
+    let transparent = match &image {
+        DynamicImage::ImageLumaA8(buffer) => buffer.pixels().any(|p| p.0[1] < u8::MAX),
+        DynamicImage::ImageLumaA16(buffer) => buffer.pixels().any(|p| p.0[1] < u16::MAX),
+        DynamicImage::ImageRgba8(buffer) => buffer.pixels().any(|p| p.0[3] < u8::MAX),
+        DynamicImage::ImageRgba16(buffer) => buffer.pixels().any(|p| p.0[3] < u16::MAX),
+        _ => false,
+    };
+    let filter = image::imageops::FilterType::Lanczos3;
+    if !transparent {
+        return image.resize_exact(size.0, size.1, filter);
+    }
+    let color = image.color();
+    // Lanczos can overshoot. Reserve headroom so the sampler's upper clamp cannot clip alpha
+    // before color is unweighted. A power-of-two scale preserves float precision.
+    const SAMPLE_SCALE: f32 = 0.25;
+    let mut weighted = image.into_rgba32f();
+    for pixel in weighted.pixels_mut() {
+        let alpha = pixel.0[3] * SAMPLE_SCALE;
+        for channel in &mut pixel.0[..3] {
+            *channel *= alpha;
+        }
+        pixel.0[3] = alpha;
+    }
+    let mut resized = image::imageops::resize(&weighted, size.0, size.1, filter);
+    drop(weighted);
+    for pixel in resized.pixels_mut() {
+        let alpha = pixel.0[3].clamp(0.0, 1.0);
+        if alpha > 0.0 {
+            for channel in &mut pixel.0[..3] {
+                *channel = (*channel / alpha).clamp(0.0, 1.0);
+            }
+            pixel.0[3] = (alpha / SAMPLE_SCALE).clamp(0.0, 1.0);
+        } else {
+            pixel.0 = [0.0; 4];
+        }
+    }
+    let resized = DynamicImage::ImageRgba32F(resized);
+    match color {
+        image::ColorType::La8 => DynamicImage::ImageLumaA8(resized.to_luma_alpha8()),
+        image::ColorType::La16 => DynamicImage::ImageLumaA16(resized.to_luma_alpha16()),
+        image::ColorType::Rgba16 => DynamicImage::ImageRgba16(resized.to_rgba16()),
+        _ => DynamicImage::ImageRgba8(resized.to_rgba8()),
+    }
 }
 
 /// A grayscale coverage mask keeps font colors separate from UI theme colors.
