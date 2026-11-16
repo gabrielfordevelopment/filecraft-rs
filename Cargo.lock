@@ -1052,7 +1052,7 @@ checksum = "b97b65636e5b9ef369943878ac74335ba1c55c1cb6adbf1e2c293c624248d693"
 
 [[package]]
 name = "filecraft"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "chrono",
  "eframe",
@@ -1066,7 +1066,7 @@ dependencies = [
 
 [[package]]
 name = "filecraft-core"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "ab_glyph",
  "chrono",

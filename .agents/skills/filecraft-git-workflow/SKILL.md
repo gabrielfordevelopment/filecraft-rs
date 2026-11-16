@@ -1,6 +1,6 @@
 ---
 name: filecraft-git-workflow
-description: Handle FileCraft (Rust) branches, staging, commits, pull requests, merges, and releases, using development for integration and main for releases. Use when the user requests Git delivery work, preparation of its PR text, or a release.
+description: Handle FileCraft (Rust) branches, staging, commits, pull requests, merges, and releases, using develop for integration and main for releases. Use when the user requests Git delivery work, preparation of its PR text, or a release.
 ---
 
 # FileCraft (Rust) Git workflow
@@ -15,11 +15,11 @@ Read the repository's [AGENTS.md](../../../AGENTS.md) for architecture, compatib
 
 ## Branch model
 
-- `development` is the integration branch and the default PR target. `main` is the release branch.
-- Start ordinary work from the latest `development`. Use a short English branch name with a task-based prefix: `feature/`, `fix/`, `chore/`, `docs/`, `refactor/`, `perf/`, `test/`, `ci/`, `build/`, `style/`, or `revert/`. Never use agent or tool prefixes.
+- `develop` is the integration branch and the default PR target. `main` is the release branch.
+- Start ordinary work from the latest `develop`. Use a short English branch name with a task-based prefix: `feature/`, `fix/`, `chore/`, `docs/`, `refactor/`, `perf/`, `test/`, `ci/`, `build/`, `style/`, or `revert/`. Never use agent or tool prefixes.
 - Create or switch branches only when the user asks for it.
 - Never reset, rebase, squash, amend, or force-push user history without explicit authorization.
-- Never commit directly to `development` or `main`.
+- Never commit directly to `develop` or `main`.
 
 ## Stage and commit
 
@@ -48,7 +48,7 @@ One or two sentences explaining the need and the essential result.
 State what users or maintainers can now do, or what failure is prevented.
 ```
 
-3. Add a `Validation` section listing the checks actually run and material limitations.
+3. Report validation results in the chat. Add a `Validation` section to PR text only when requested.
 4. Preserve approved wording and user-added content when updating a PR.
 
 ## Releases

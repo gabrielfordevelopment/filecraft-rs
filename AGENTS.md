@@ -116,6 +116,6 @@
 - Use [filecraft-code-review](.agents/skills/filecraft-code-review/SKILL.md) for requested code, diff, or PR reviews.
 - Use [filecraft-desktop-testing](.agents/skills/filecraft-desktop-testing/SKILL.md) for running and visually validating the application.
 - Never push, create remotes, or publish branches or releases unless asked. The maintainer publishes them.
-- `development` is the integration branch and `main` is the release branch. Never commit directly to them. Use task branches with prefixes such as `feature/`, `fix/`, and `chore/`, never agent or tool prefixes.
+- `develop` is the integration branch and `main` is the release branch. Never commit directly to them. Use task branches with prefixes such as `feature/`, `fix/`, and `chore/`, never agent or tool prefixes.
 - Creating or switching branches, committing, pushing, opening PRs, and merging require authorization for that action.
 - Use English Conventional Commit subjects of at most 70 characters, without a body.

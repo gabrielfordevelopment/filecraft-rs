@@ -6,6 +6,8 @@ All notable user-facing changes to FileCraft (Rust) are documented here.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-16
+
 ### Feature
 
 - Added Image Tools to stamp dates from image file names in any corner, resize images with proportions preserved, or do both. JPEG and PNG copies are saved in a new subfolder without changing originals.
